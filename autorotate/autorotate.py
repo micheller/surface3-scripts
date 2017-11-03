@@ -1,147 +1,114 @@
 #!/usr/bin/env python2
-import time
 import os
+import os.path
+import re
 import subprocess
 import sys
-from gi.repository import Notify
+import time
 
-#FUNCTIONS
-def readFile(path): #self.filename
-    myDatei = open(path, "r")
-    myList = []
-    #Liste aus Datei erstellen
-    for Line in myDatei:
-        Line = Line.rstrip()
-        #Line = Line.decode('utf8')
-        myList.append(Line)
-    myDatei.close()
-    return(myList)
+from collections import namedtuple
 
-def writeFile(path, myList): #self.filename
-    myDatei = open(path, "w")
-    #Liste aus Datei erstelle
-    myDatei.writelines(myList)
-    myDatei.close()
+devicename = 'NTRG0001:01 1B96:1B05'
+freq = 5.0
+
+MONITOR_CONNECTED_RE = re.compile(r'\bconnected\b')
+DIGITIZER_RE = re.compile(r'NTRG0001\:01\s+1B96\:1B05')
+PEN_RE = re.compile(r'\bPen (stylus|eraser)\b')
+PROXIMITY_RE = re.compile(r'\bProximity\=(\w+)', re.M)
+
+current_orientation = ''
+currently_proximate = False
+xinput_statemap = {True: 'disable', False: 'enable'}
+
+
+def find_accelerometers():
+    spath = '/sys/bus/iio/devices/'
+    dpath = [os.path.join(spath, p) for p in os.listdir('/sys/bus/iio/devices/')
+             if re.match('iio\:device\d', p) and os.path.exists(os.path.join(spath, p, 'in_accel_scale'))]
+    if not dpath:
+        sys.stderr.write("Could not find iio device to monitor.")
+        sys.exit(1)
+
+    return (os.path.join(dpath[0], 'in_accel_x_raw'),
+            os.path.join(dpath[0], 'in_accel_y_raw'))
+
+x_accel_path, y_accel_path = find_accelerometers()
+
 
 def refreshtouch():
     os.system('xinput disable "NTRG0001:01 1B96:1B05"')
     os.system('xinput enable "NTRG0001:01 1B96:1B05"')
 
-def checkdisplays():
-    check_displays = "xrandr | grep -w 'connected'"
-    str_displays = str(subprocess.check_output(check_displays, shell=True).lower().rstrip())
-    list_displays = str_displays.splitlines()
-    int_displays = len(list_displays)
-    return int_displays
 
-#PARAMETERS
-count = 0
-path = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
-devicename = "'NTRG0001:01 1B96:1B05'"
-penname = "'NTRG0001:01 1B96:1B05 Pen'"
-freq = 5.0
+def countdisplays():
+    return int(len([l for l in subprocess.check_output(['xrandr', '--current']).splitlines()
+                            if MONITOR_CONNECTED_RE.search(l)]))
 
 
-# Look for accelerometer
-while count <= 9:
-    if os.path.exists('/sys/bus/iio/devices/iio:device' + str(count) + '/in_accel_scale') == True:
-        dpath = '/sys/bus/iio/devices/iio:device' + str(count) + '/' # directory of accelerometer device (iio)
-        break
-    count = count + 1
-#print(dpath)
+# Landscape
+def lsx(thex): return thex >= 65000 or thex <= 650
 
-#Commands for correct rotation
-normal = 'xrandr -o normal; '+'xinput set-prop ' + devicename +" 'Coordinate Transformation Matrix' 1 0 0 0 1 0 0 0 1;"+'xinput set-prop ' + penname +" 'Coordinate Transformation Matrix' 1 0 0 0 1 0 0 0 1;"
-inverted = 'xrandr -o inverted; '+'xinput set-prop ' + devicename +" 'Coordinate Transformation Matrix' -1 0 1 0 -1 1 0 0 1;"+'xinput set-prop ' + penname +" 'Coordinate Transformation Matrix' -1 0 1 0 -1 1 0 0 1;"
-right = 'xrandr -o left; '+'xinput set-prop ' + devicename +" 'Coordinate Transformation Matrix' 0 -1 1 1 0 0 0 0 1;"+'xinput set-prop ' + penname +" 'Coordinate Transformation Matrix' 0 -1 1 1 0 0 0 0 1;"
-left = 'xrandr -o right; '+'xinput set-prop ' + devicename +" 'Coordinate Transformation Matrix' 0 1 0 -1 0 1 0 0 1;"+'xinput set-prop ' + penname +" 'Coordinate Transformation Matrix' 0 1 0 -1 0 1 0 0 1;"
-state_dict = {0: "normal", 1: "inverted", 2: "right", 3: "left"}
-current_state = 0
-previous_tstate = "on"
-previousStylusProximityStatus = "out"
-firstrun = True
-#ACCELEROMETER
-with open(dpath + 'in_accel_scale') as f:
-    scale = float(f.readline())
+
+# Portrait
+def ptx(thex): return not lsx(thex)
+
+
+# Left
+def lfy(they): return they <= 65000 and they >= 64000
+
+
+# Right
+def rgy(they): return not lfy(they)
+
+
+# It's a little odd that X labels it 'left' when you've just turned
+# the tablet to the right, and vice versa, but that's the convention,
+# I guess.
+Transform = namedtuple('Tranform', ['name', 'mode', 'matrix', 'xrule', 'yrule'])
+transforms = [
+    Transform('normal',   0, '1 0 0 0 1 0 0 0 1',   lsx, lfy),
+    Transform('inverted', 1, '-1 0 1 0 -1 1 0 0 1', lsx, rgy),
+    Transform('left',     2, '0 -1 1 1 0 0 0 0 1',  ptx, rgy),
+    Transform('right',    3, '0 1 0 -1 0 1 0 0 1',  ptx, lfy)
+]
+
+
+def is_in(pen):
+    res = PROXIMITY_RE.search(subprocess.check_output(['xinput', 'query-state', pen]))
+    return (res and res.group(1).lower() == 'in')
+
+
 while True:
-    multimonitor = False
-    int_displays = checkdisplays()
-    if int_displays > 1:
-        multimonitor = True
+    int_displays = countdisplays()
     time.sleep(1.0/freq)
-    previous_state = current_state
-    status = readFile(os.path.join(path, 'status.txt'))
-    if str(status[0]) == "on" and multimonitor == False:
-        with open(dpath + 'in_accel_x_raw', 'r') as fx:
-            with open(dpath + 'in_accel_y_raw', 'r') as fy:
-                with open(dpath + 'in_accel_z_raw', 'r') as fz:
-                    thex = float(fx.readline())
-                    they = float(fy.readline())
-                    thez = float(fz.readline())
-                    if checkdisplays() == 1:
-                        if (thex >= 65000 or thex <=650):
-                            if (they <= 65000 and they >= 64000):
-                                os.system(normal)
-                                current_state = 0
-                            if (they >= 650 and they <= 1100):
-                                os.system(inverted)
-                                current_state = 1
-                        if (thex <= 64999 and thex >= 650):
-                            if (thex >= 800 and thex <= 1000):
-                                os.system(right)
-                                current_state = 2
-                            if (thex >= 64500 and thex <=64700):
-                                os.system(left)
-                                current_state = 3
+    if int_displays == 1:
 
-        os.system('clear')
-        print("ExtDi: " + str(multimonitor))
-        print("A-ROT: " + status[0])
-        print("    x: " + str(thex))
-        print("    y: " + str(they))
-        print("    z: " + str(thez))
-        print("  POS: " + state_dict[current_state])
-    if status[0] == "off" or multimonitor == True:
-        os.system('clear')
-        print("ExtDi: " + str(multimonitor))
-        print("A-ROT: " + status[0])
-        print("    x: " + status[0])
-        print("    y: " + status[0])
-        print("    z: " + status[0])
-        print("  POS: " + state_dict[previous_state])
-    if current_state != previous_state:
-        refreshtouch()
-        print "Touchscreen refreshed"
+        # Check accelerometers
+        # Do we need to check the touch_devices list every time?  I
+        # think we do; the list will change dynamically if we
+        # dynamically load the stylus driver after the system has
+        # booted.
+        touch_devices = filter(lambda n: DIGITIZER_RE.match(n),
+                               subprocess.check_output(['xinput', '--list', '--name-only']).splitlines()) 
+        with open(x_accel_path, 'r') as fx:
+            with open(y_accel_path, 'r') as fy:
+                thex = float(fx.readline())
+                they = float(fy.readline())
+                for check in transforms:
+                    if check.xrule(thex) and check.yrule(they):
+                        if current_orientation != check.name:
+                            print "Switching to orientation %s" % check.name
+                            os.system('xrandr -o %s' % check.name)
+                            for device in touch_devices:
+                                os.system("xinput set-prop '%s' 'Coordinate Transformation Matrix' %s" %
+                                          (device, check.matrix))
+                            current_orientation = check.name
+                            refreshtouch()
 
-    print("##########################")
-#SCREEN
-    stylusProximityCommand = 'xinput query-state "NTRG0001:01 1B96:1B05 Pen" | grep Proximity | cut -d " " -f3 | cut -d "=" -f2'
-    stylusProximityStatus = str(subprocess.check_output(stylusProximityCommand, shell=True).lower().rstrip())
-    tstatus = readFile(os.path.join(path, 'touch.txt'))
-#TOUCHSCREEN
-    if str(tstatus[0]) == "on" and stylusProximityStatus == "out":
-        os.system('xinput enable ' + devicename + '')
-        print("TOUCH: " + tstatus[0])
-        if str(tstatus[0]) != previous_tstate:
-            Notify.init ("Touchscreen-ON")
-            RotationON=Notify.Notification.new ("Touchscreen","Touchscreen is now turned ON","dialog-information")
-            RotationON.show()
-    elif str(tstatus[0]) == "off" and stylusProximityStatus == "out":
-        os.system('xinput disable ' + devicename + '')
-        print("TOUCH: " + tstatus[0])
-        if str(tstatus[0]) != previous_tstate:
-            Notify.init ("Touchscreen-OFF")
-            RotationOFF=Notify.Notification.new ("Touchscreen","Touchscreen is now turned OFF","dialog-information")
-            RotationOFF.show()
-    previous_tstate = str(tstatus[0])
-#PEN
-    if str(tstatus[0]) == "off" and stylusProximityStatus == "in":
-        print("TOUCH: " + tstatus[0])
-        print("  PEN: " + stylusProximityStatus)
-    elif str(tstatus[0]) == "on" and stylusProximityStatus == "in" and firstrun == False:
-        os.system('xinput disable "NTRG0001:01 1B96:1B05"')
-        print("TOUCH: " + "off")
-        print("  PEN: " + stylusProximityStatus)
-    elif stylusProximityStatus == "out":
-        print("  PEN: " + stylusProximityStatus)
-        firstrun == False
+        # Palm rejection (sort-of):
+        pen_devices = [p for p in touch_devices if PEN_RE.search(p)]
+        pen_status = bool([p for p in pen_devices if is_in(p)])
+        if pen_status != currently_proximate:
+            print "%s palm rejection" % ("Activating" if pen_status else "Deactivating")
+            currently_proximate = pen_status
+            os.system("xinput %s '%s'" % (xinput_statemap[pen_status], devicename))
