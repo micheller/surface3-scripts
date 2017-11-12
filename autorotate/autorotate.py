@@ -46,30 +46,25 @@ def countdisplays():
 
 
 # Landscape
-def lsx(thex): return thex >= 65000 or thex <= 650
-
+def lsx(thex, they): return thex >= 65000 or thex <= 650
+def lsn(thex, they): return they <= 65000 and they >= 64000
+def lsi(thex, they): return they >= 650 and they <= 1100
 
 # Portrait
-def ptx(thex): return not lsx(thex)
-
-
-# Left
-def lfy(they): return they <= 65000 and they >= 64000
-
-
-# Right
-def rgy(they): return not lfy(they)
-
+def ptx(thex, they): return not lsx(thex, they)
+def ptl(thex, they): return thex >= 800 and thex <= 1000
+def ptr(thex, they): return thex >= 64500 and thex <=64700
 
 # It's a little odd that X labels it 'left' when you've just turned
 # the tablet to the right, and vice versa, but that's the convention,
 # I guess.
 Transform = namedtuple('Tranform', ['name', 'mode', 'matrix', 'xrule', 'yrule'])
+
 transforms = [
-    Transform('normal',   0, '1 0 0 0 1 0 0 0 1',   lsx, lfy),
-    Transform('inverted', 1, '-1 0 1 0 -1 1 0 0 1', lsx, rgy),
-    Transform('left',     2, '0 -1 1 1 0 0 0 0 1',  ptx, rgy),
-    Transform('right',    3, '0 1 0 -1 0 1 0 0 1',  ptx, lfy)
+    Transform('normal',   0, '1 0 0 0 1 0 0 0 1',   lsx, lsn),
+    Transform('inverted', 1, '-1 0 1 0 -1 1 0 0 1', lsx, lsi),
+    Transform('left',     2, '0 -1 1 1 0 0 0 0 1',  ptx, ptl),
+    Transform('right',    3, '0 1 0 -1 0 1 0 0 1',  ptx, ptr)
 ]
 
 
@@ -95,7 +90,7 @@ while True:
                 thex = float(fx.readline())
                 they = float(fy.readline())
                 for check in transforms:
-                    if check.xrule(thex) and check.yrule(they):
+                    if check.xrule(thex, they) and check.yrule(thex, they):
                         if current_orientation != check.name:
                             print "Switching to orientation %s" % check.name
                             os.system('xrandr -o %s' % check.name)
@@ -104,6 +99,7 @@ while True:
                                           (device, check.matrix))
                             current_orientation = check.name
                             refreshtouch()
+                            break
 
         # Palm rejection (sort-of):
         pen_devices = [p for p in touch_devices if PEN_RE.search(p)]
