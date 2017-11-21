@@ -12,7 +12,7 @@ devicename = 'NTRG0001:01 1B96:1B05'
 freq = 5.0
 
 MONITOR_CONNECTED_RE = re.compile(r'\bconnected\b')
-DIGITIZER_RE = re.compile(r'NTRG0001\:01\s+1B96\:1B05')
+DIGITIZER_RE = re.compile(r'(NTRG0001\:01\s+1B96\:1B05|Microsoft Surface Type Cover Touchpad)')
 PEN_RE = re.compile(r'\bPen (stylus|eraser)\b')
 PROXIMITY_RE = re.compile(r'\bProximity\=(\w+)', re.M)
 
