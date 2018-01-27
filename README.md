@@ -47,5 +47,6 @@ Not tested yet:
 Credits
 -------
 
-Gratefully forked from https://github.com/elfsternberg/surface3-scripts
+Gratefully forked from https://github.com/elfsternberg/surface3-scripts;
+
 link obtained from https://www.reddit.com/r/linux/comments/6xuv7v/yoga_920_and_gnulinux/dt881bk/
