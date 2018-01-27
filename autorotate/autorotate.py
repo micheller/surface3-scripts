@@ -8,12 +8,12 @@ import time
 
 from collections import namedtuple
 
-devicename = 'NTRG0001:01 1B96:1B05'
+devicename = 'SYNA2B31:00 06CB:7F8B Touchpad'
 freq = 5.0
 
 MONITOR_CONNECTED_RE = re.compile(r'\bconnected\b')
-DIGITIZER_RE = re.compile(r'(NTRG0001\:01\s+1B96\:1B05|Microsoft Surface Type Cover Touchpad)')
-PEN_RE = re.compile(r'\bPen (stylus|eraser)\b')
+DIGITIZER_RE = re.compile(r'(SYNA2B31:00 06CB:7F8B Touchpad|Wacom HID 5110 Finger)')
+PEN_RE = re.compile(r'\bWacom HID 5110 Pen\b')
 PROXIMITY_RE = re.compile(r'\bProximity\=(\w+)', re.M)
 
 current_orientation = ''
@@ -36,8 +36,8 @@ x_accel_path, y_accel_path = find_accelerometers()
 
 
 def refreshtouch():
-    os.system('xinput disable "NTRG0001:01 1B96:1B05"')
-    os.system('xinput enable "NTRG0001:01 1B96:1B05"')
+    os.system('xinput disable "SYNA2B31:00 06CB:7F8B Touchpad"')
+    os.system('xinput enable "SYNA2B31:00 06CB:7F8B Touchpad"')
 
 
 def countdisplays():
@@ -81,7 +81,7 @@ def manage_orientation_and_palm_rejection(options):
         int_displays = countdisplays()
         time.sleep(1.0/freq)
         if int_displays == 1:
-    
+
             # Check accelerometers
             # Do we need to check the touch_devices list every time?  I
             # think we do; the list will change dynamically if we
