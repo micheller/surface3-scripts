@@ -1,4 +1,4 @@
-Surface3-Scripts
+Surface3-Scripts adapted for Yoga 920
 ================
 
 Originally derived from surface3-scripts, this program is just the same
