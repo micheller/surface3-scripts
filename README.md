@@ -37,6 +37,13 @@ Start script:
 $ python2 /path/to/autorotate.py
 ```
 
+Status
+------
+Not tested yet:
+* Pen
+* Palm detection code
+* Proximity sensor if there is any
+
 Credits
 -------
 
