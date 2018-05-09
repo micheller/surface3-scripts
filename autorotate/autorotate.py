@@ -12,8 +12,8 @@ devicename = 'SYNA2B31:00 06CB:7F8B Touchpad'
 freq = 5.0
 
 MONITOR_CONNECTED_RE = re.compile(r'\bconnected\b')
-DIGITIZER_RE = re.compile(r'(SYNA2B31:00 06CB:7F8B Touchpad|Wacom HID 5110 Finger)')
-PEN_RE = re.compile(r'\bWacom HID 5110 Pen\b')
+DIGITIZER_RE = re.compile(r'(SYNA2B31:00 06CB:7F8B Touchpad|Wacom HID \d+)')
+PEN_RE = re.compile(r'\bWacom HID \d+ Pen\b')
 PROXIMITY_RE = re.compile(r'\bProximity\=(\w+)', re.M)
 
 current_orientation = ''
